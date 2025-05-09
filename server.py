@@ -237,3 +237,91 @@ class TupleSpace:
                                         return (command, key, None)
 
                                     return None
+
+                                import socket
+                                import sys
+                                from .request_parser import RequestParser
+
+                                class Client:
+                                    def __init__(self, host, port, request_file):
+                                        self.host = host
+                                        self.port = port
+                                        self.request_file = request_file
+                                        self.socket = None
+
+                                    def _send_request(self, command, key, value=None):
+                                        if command == 'P':
+                                            request_str = f"P{key} {value}"
+                                        else:
+                                            request_str = f"{command}{key}"
+
+                                        # Check size limit
+                                        if len(request_str) > 999:
+                                            print(f"Error: Request too long: {request_str}")
+                                            return None
+
+                                        # Format the message according to protocol
+                                        message = f"{len(request_str):03d}{request_str}"
+                                        self.socket.sendall(message.encode('utf-8'))
+
+                                        # Receive response
+                                        response_data = self.socket.recv(1024)
+                                        if not response_data:
+                                            return None
+
+                                        size_str = response_data[:3]
+                                        if not size_str.isdigit():
+                                            return None
+
+                                        expected_size = int(size_str)
+                                        if len(response_data) != expected_size:
+                                            return None
+
+                                        response = response_data[3:].decode('utf-8')
+                                        return response
+
+                                    def run(self):
+                                        try:
+                                            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                            self.socket.connect((self.host, self.port))
+
+                                            with open(self.request_file, 'r') as f:
+                                                for line in f:
+                                                    request = RequestParser.parse_line(line)
+                                                    if not request:
+                                                        print(f"Skipping invalid request: {line.strip()}")
+                                                        continue
+
+                                                    command, key, value = request
+                                                    if command == 'P':
+                                                        print(f"PUT {key} {value}", end=': ')
+                                                    else:
+                                                        print(f"{command} {key}", end=': ')
+
+                                                    response = self._send_request(command, key, value)
+                                                    if response:
+                                                        print(response)
+                                                    else:
+                                                        print("No response from server")
+
+                                        except FileNotFoundError:
+                                            print(f"Error: Request file '{self.request_file}' not found")
+                                        except ConnectionRefusedError:
+                                            print("Error: Could not connect to server")
+                                        except Exception as e:
+                                            print(f"Error: {str(e)}")
+                                        finally:
+                                            if self.socket:
+                                                self.socket.close()
+
+                                if __name__ == "__main__":
+                                    if len(sys.argv) != 4:
+                                        print("Usage: python client.py <host> <port> <request_file>")
+                                        sys.exit(1)
+
+                                    host = sys.argv[1]
+                                    port = int(sys.argv[2])
+                                    request_file = sys.argv[3]
+
+                                    client = Client(host, port, request_file)
+                                    client.run()
