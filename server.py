@@ -166,3 +166,47 @@ class TupleSpace:
 
                     finally:
                         self.tuple_space.decrement_client_count()
+                        import socket
+                        import threading
+                        from .tuple_space import TupleSpace
+                        from .client_handler import ClientHandler
+
+                        class Server:
+                            def __init__(self, host='0.0.0.0', port=51234):
+                                self.host = host
+                                self.port = port
+                                self.tuple_space = TupleSpace()
+                                self.server_socket = None
+
+                            def start(self):
+                                self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                                self.server_socket.bind((self.host, self.port))
+                                self.server_socket.listen(5)
+                                print(f"Server started on {self.host}:{self.port}")
+
+                                # Start periodic reporting thread
+                                report_thread = threading.Thread(target=self.tuple_space.periodic_report, daemon=True)
+                                report_thread.start()
+
+                                try:
+                                    while True:
+                                        client_socket, client_address = self.server_socket.accept()
+                                        print(f"Accepted connection from {client_address}")
+                                        handler = ClientHandler(client_socket, client_address, self.tuple_space)
+                                        handler.start()
+                                except KeyboardInterrupt:
+                                    print("Server shutting down...")
+                                finally:
+                                    if self.server_socket:
+                                        self.server_socket.close()
+
+                        if __name__ == "__main__":
+                            import sys
+                            if len(sys.argv) > 1:
+                                port = int(sys.argv[1])
+                            else:
+                                port = 51234
+
+                            server = Server(port=port)
+                            server.start()
