@@ -210,3 +210,30 @@ class TupleSpace:
 
                             server = Server(port=port)
                             server.start()
+                            import re
+
+                            class RequestParser:
+                                @staticmethod
+                                def parse_line(line):
+                                    line = line.strip()
+                                    if not line:
+                                        return None
+
+                                    # Check for PUT command
+                                    put_match = re.match(r'^PUT\s+(\S+)\s+(.*)$', line)
+                                    if put_match:
+                                        key, value = put_match.groups()
+                                        if len(key) + len(value) + len("PUT ") > 970:
+                                            return None
+                                        return ('P', key, value)
+
+                                    # Check for READ or GET command
+                                    cmd_match = re.match(r'^(READ|GET)\s+(\S+)$', line)
+                                    if cmd_match:
+                                        cmd, key = cmd_match.groups()
+                                        command = 'R' if cmd == 'READ' else 'G'
+                                        if len(key) + len(cmd) + 1 > 970:  # +1 for space
+                                            return None
+                                        return (command, key, None)
+
+                                    return None
