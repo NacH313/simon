@@ -105,3 +105,64 @@ class TupleSpace:
             else:
                 self._stats['total_errors'] += 1
                 return "ERR invalid command"
+            import socket
+            import threading
+            from .tuple_space import TupleSpace
+
+            class ClientHandler(threading.Thread):
+                def __init__(self, client_socket, client_address, tuple_space):
+                    threading.Thread.__init__(self)
+                    self.client_socket = client_socket
+                    self.client_address = client_address
+                    self.tuple_space = tuple_space
+
+                def run(self):
+                    try:
+                        self.tuple_space.increment_client_count()
+                        with self.client_socket:
+                            while True:
+                                data = self.client_socket.recv(1024)
+                                if not data:
+                                    break
+
+                                # Parse the request
+                                try:
+                                    size_str = data[:3]
+                                    if not size_str.isdigit():
+                                        raise ValueError("Invalid size prefix")
+
+                                    size = int(size_str)
+                                    if size != len(data):
+                                        raise ValueError("Size mismatch")
+
+                                    command = data[3]
+                                    key_value = data[4:].decode('utf-8')
+
+                                    if command in ['R', 'G']:
+                                        # READ or GET - only key is provided
+                                        if len(key_value.split(' ', 1)) != 1:
+                                            raise ValueError("Invalid format for READ/GET")
+                                        key = key_value
+                                        response = self.tuple_space.process_request(command, key)
+                                    elif command == 'P':
+                                        # PUT - key and value are provided
+                                        parts = key_value.split(' ', 1)
+                                        if len(parts) != 2:
+                                            raise ValueError("Invalid format for PUT")
+                                        key, value = parts
+                                        response = self.tuple_space.process_request(command, key, value)
+                                    else:
+                                        raise ValueError("Invalid command")
+
+                                    # Send response
+                                    response_data = f"{len(response):03d}{response}".encode('utf-8')
+                                    self.client_socket.sendall(response_data)
+
+                                except Exception as e:
+                                    error_response = f"ERR {str(e)}"
+                                    response_data = f"{len(error_response):03d}{error_response}".encode('utf-8')
+                                    self.client_socket.sendall(response_data)
+                                    break
+
+                    finally:
+                        self.tuple_space.decrement_client_count()
