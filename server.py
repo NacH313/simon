@@ -106,8 +106,8 @@ class TupleSpace:
                 self._stats['total_errors'] += 1
                 return "ERR invalid command"
             import socket
-            import threading
-            from .tuple_space import TupleSpace
+    import threading
+    from .tuple_space import TupleSpace
 
             class ClientHandler(threading.Thread):
                 def __init__(self, client_socket, client_address, tuple_space):
@@ -325,3 +325,69 @@ class TupleSpace:
 
                                     client = Client(host, port, request_file)
                                     client.run()
+                                    server/server.py 51234
+                                    client/client.py localhost 51234 requests.txt
+
+
+import unittest
+from server.tuple_space import TupleSpace
+
+
+class TestTupleSpace(unittest.TestCase):
+    def setUp(self):
+        self.tuple_space = TupleSpace()
+
+    def test_put_and_read(self):
+        response = self.tuple_space.process_request('P', 'test', 'value')
+        self.assertEqual(response, "OK(test, value) added")
+
+        response = self.tuple_space.process_request('R', 'test')
+        self.assertEqual(response, "OK(test, value) read")
+
+    def test_get(self):
+        self.tuple_space.process_request('P', 'temp', 'data')
+        response = self.tuple_space.process_request('G', 'temp')
+        self.assertEqual(response, "OK(temp, data) removed")
+
+    def test_errors(self):
+        self.tuple_space.process_request('P', 'existing', 'value')
+        response = self.tuple_space.process_request('P', 'existing', 'value')
+        self.assertEqual(response, "ERR existing already exists")
+
+        response = self.tuple_space.process_request('R', 'nonexistent')
+        self.assertEqual(response, "ERR nonexistent does not exist")
+
+
+if __name__ == '__main__':
+    unittest.main()
+    import unittest
+    from client.request_parser import RequestParser
+
+
+    class TestRequestParser(unittest.TestCase):
+        def test_valid_requests(self):
+            self.assertEqual(
+                RequestParser.parse_line("PUT key value"),
+                ('P', 'key', 'value')
+            )
+            self.assertEqual(
+                RequestParser.parse_line("READ key"),
+                ('R', 'key', None)
+            )
+            self.assertEqual(
+                RequestParser.parse_line("GET key"),
+                ('G', 'key', None)
+            )
+
+        def test_invalid_requests(self):
+            self.assertIsNone(RequestParser.parse_line("INVALID command"))
+            self.assertIsNone(RequestParser.parse_line("PUT key"))  # Missing value
+            self.assertIsNone(RequestParser.parse_line("READ"))  # Missing key
+
+
+    if __name__ == '__main__':
+        unittest.main()
+
+
+
+
